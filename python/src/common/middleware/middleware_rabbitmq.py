@@ -1,7 +1,19 @@
 import pika
 import random
 import string
-from .middleware import MessageMiddlewareQueue, MessageMiddlewareExchange
+from .middleware import (
+    MessageMiddlewareCloseError,
+    MessageMiddlewareDisconnectedError,
+    MessageMiddlewareExchange,
+    MessageMiddlewareMessageError,
+    MessageMiddlewareQueue,
+)
+from pika.exceptions import (
+    AMQPConnectionError,
+    AMQPError,
+    ConnectionWrongStateError,
+    ChannelWrongStateError,
+)
 
 class MessageMiddlewareQueueRabbitMQ(MessageMiddlewareQueue):
 
