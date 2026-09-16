@@ -24,6 +24,20 @@ def random_queue_name(name):
     suffix = "".join(random.choices(string.ascii_lowercase + string.digits, k=16))
     return f"{name}_{suffix}"
 
+#Convierte errores de Pika en las excepciones definidas por el middleware
+def raise_message_error(error):
+    if isinstance(
+        error,
+        (
+            AMQPConnectionError,
+            ConnectionWrongStateError,
+            ChannelWrongStateError,
+        ),
+    ):
+        raise MessageMiddlewareDisconnectedError() from error
+    raise MessageMiddlewareMessageError() from error
+
+
 class MessageMiddlewareQueueRabbitMQ(MessageMiddlewareQueue):
 
     def __init__(self, host, queue_name):
