@@ -42,10 +42,67 @@ class MessageMiddlewareQueueRabbitMQ(MessageMiddlewareQueue):
 
     def __init__(self, host, queue_name):
         try:
-            self.connection = pika.BlockingConnection(connection_parameters(host))
-            self.channel = self.connection.channel()
+            self.connection = pika.BlockingConnection(connection_parameters(host)) #Conexion TCP con el broker RabbitMQ
+            self.channel = self.connection.channel()#Canal AMQP utilizado para declarar, publicar y consumir mensajes
             self.channel.queue_declare(queue=queue_name, durable=True)
-            self.queue_name = queue_name
+            self.queue_name = queue_name #Nombre de la cola compartida por productores y consumidores
+            self.consuming = False #Indica si este middleware esta ejecutando un consumo
+        except (AMQPError, OSError) as error:
+            raise_message_error(error)
+
+    def start_consuming(self, on_message_callback):
+        #Consume mensajes hasta que el callback solicite detenerse
+        def callback(channel, method, properties, body):
+            # El callback recibe funciones que confirman o rechazan este mensaje.
+            def ack():
+                #Confirma a RabbitMQ la recepción correcta del mensaje
+                try:
+                    channel.basic_ack(delivery_tag=method.delivery_tag)
+                except (AMQPError, OSError) as error:
+                    raise_message_error(error)
+
+            def nack():
+                #Rechaza el mensaje y evita que vuelva a encolarse
+                try:
+                    channel.basic_nack(
+                        delivery_tag=method.delivery_tag,
+                        requeue=False,
+                    )
+                except (AMQPError, OSError) as error:
+                    raise_message_error(error)
+
+            try:
+                on_message_callback(body, ack, nack)
+            except (
+                MessageMiddlewareDisconnectedError,
+                MessageMiddlewareMessageError,
+            ):
+                raise
+            except Exception as error:
+                raise MessageMiddlewareMessageError() from error
+
+        try:
+            # Un prefetch de uno reparte el trabajo entre consumidores sin
+            # entregar nuevos mensajes a uno que aun no confirmo el anterior
+            self.channel.basic_qos(prefetch_count=1)
+            self.channel.basic_consume(
+                queue=self.queue_name,
+                on_message_callback=callback,
+                auto_ack=False,
+            )
+            self.consuming = True
+            self.channel.start_consuming()
+        except (AMQPError, OSError) as error:
+            raise_message_error(error)
+        finally:
+            self.consuming = False
+
+    def stop_consuming(self):
+        #Detiene el consumo actual pero si no comenzo entonces  no realiza ninguna accion
+        if not self.consuming:
+            return
+        try:
+            self.channel.stop_consuming()
             self.consuming = False
         except (AMQPError, OSError) as error:
             raise_message_error(error)
