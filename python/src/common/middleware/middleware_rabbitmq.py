@@ -41,7 +41,14 @@ def raise_message_error(error):
 class MessageMiddlewareQueueRabbitMQ(MessageMiddlewareQueue):
 
     def __init__(self, host, queue_name):
-        pass
+        try:
+            self.connection = pika.BlockingConnection(connection_parameters(host))
+            self.channel = self.connection.channel()
+            self.channel.queue_declare(queue=queue_name, durable=True)
+            self.queue_name = queue_name
+            self.consuming = False
+        except (AMQPError, OSError) as error:
+            raise_message_error(error)
 
 class MessageMiddlewareExchangeRabbitMQ(MessageMiddlewareExchange):
     
