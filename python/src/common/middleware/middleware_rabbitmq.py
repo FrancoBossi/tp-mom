@@ -107,6 +107,25 @@ class MessageMiddlewareQueueRabbitMQ(MessageMiddlewareQueue):
         except (AMQPError, OSError) as error:
             raise_message_error(error)
 
+    def send(self, message):
+        #Publica un mensaje directamente en la cola de trabajo
+        try:
+            self.channel.basic_publish(
+                exchange="",
+                routing_key=self.queue_name,
+                body=message,
+            )
+        except (AMQPError, OSError) as error:
+            raise_message_error(error)
+
+    def close(self):
+        #Cerramos la conexion con RabbitMQ si todavia esta abierta
+        try:
+            if self.connection.is_open:
+                self.connection.close()
+        except (AMQPError, OSError) as error:
+            raise MessageMiddlewareCloseError() from error
+
 class MessageMiddlewareExchangeRabbitMQ(MessageMiddlewareExchange):
     
     def __init__(self, host, exchange_name, routing_keys):
